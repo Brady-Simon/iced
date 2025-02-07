@@ -737,6 +737,17 @@ async fn run_instance<P, C>(
                                 }
                             }
                         }
+
+                        if let Some(redraw_at) = window_manager.redraw_at() {
+                            let _ =
+                                control_sender.start_send(Control::ChangeFlow(
+                                    ControlFlow::WaitUntil(redraw_at),
+                                ));
+                        } else {
+                            let _ = control_sender.start_send(
+                                Control::ChangeFlow(ControlFlow::Wait),
+                            );
+                        }
                     }
                     event::Event::PlatformSpecific(
                         event::PlatformSpecific::MacOS(
@@ -862,18 +873,15 @@ async fn run_instance<P, C>(
                         });
 
                         if let user_interface::State::Updated {
-                            redraw_request: Some(redraw_request),
+                            redraw_request,
+                            input_method,
                         } = ui_state
                         {
-                            match redraw_request {
-                                window::RedrawRequest::NextFrame => {
-                                    window.raw.request_redraw();
-                                }
-                                window::RedrawRequest::At(at) => {
-                                    window.redraw_at = Some(at);
-                                }
-                            }
+                            window.request_redraw(redraw_request);
+                            window.request_input_method(input_method);
                         }
+
+                        window.draw_preedit();
 
                         debug.render_started();
                         match compositor.present(
@@ -1017,26 +1025,23 @@ async fn run_instance<P, C>(
                                 );
 
                             #[cfg(feature = "unconditional-rendering")]
-                            window.raw.request_redraw();
+                            window.request_redraw(
+                                window::RedrawRequest::NextFrame,
+                            );
 
                             match ui_state {
-                                #[cfg(not(
-                                    feature = "unconditional-rendering"
-                                ))]
                                 user_interface::State::Updated {
-                                    redraw_request: Some(redraw_request),
-                                } => match redraw_request {
-                                    window::RedrawRequest::NextFrame => {
-                                        window.raw.request_redraw();
-                                    }
-                                    window::RedrawRequest::At(at) => {
-                                        window.redraw_at = Some(at);
-                                    }
-                                },
+                                    redraw_request: _redraw_request,
+                                    ..
+                                } => {
+                                    #[cfg(not(
+                                        feature = "unconditional-rendering"
+                                    ))]
+                                    window.request_redraw(_redraw_request);
+                                }
                                 user_interface::State::Outdated => {
                                     uis_stale = true;
                                 }
-                                user_interface::State::Updated { .. } => {}
                             }
 
                             for (event, status) in window_events

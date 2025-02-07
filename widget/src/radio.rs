@@ -365,7 +365,7 @@ where
     fn update(
         &mut self,
         tree: &mut Tree,
-        event: Event,
+        event: &Event,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
         _renderer: &Renderer,
@@ -397,7 +397,7 @@ where
 
         if let Event::Window(window::Event::RedrawRequested(now)) = event {
             let state = tree.state.downcast_mut::<State<Renderer::Paragraph>>();
-            state.now = now;
+            state.now = *now;
             self.last_status = Some(current_status);
             if state.is_animating() {
                 shell.request_redraw();

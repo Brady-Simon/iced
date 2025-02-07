@@ -3,6 +3,7 @@ use crate::core::layout;
 use crate::core::mouse;
 use crate::core::overlay;
 use crate::core::renderer;
+use crate::core::text;
 use crate::core::widget;
 use crate::core::widget::tree::{self, Tree};
 use crate::core::window;
@@ -17,7 +18,9 @@ use crate::core::{
 #[allow(missing_debug_implementations)]
 pub struct Pop<'a, Message, Theme = crate::Theme, Renderer = crate::Renderer> {
     content: Element<'a, Message, Theme, Renderer>,
-    on_show: Option<Message>,
+    key: Option<text::Fragment<'a>>,
+    on_show: Option<Box<dyn Fn(Size) -> Message + 'a>>,
+    on_resize: Option<Box<dyn Fn(Size) -> Message + 'a>>,
     on_hide: Option<Message>,
     anticipate: Pixels,
 }
@@ -33,21 +36,44 @@ where
     ) -> Self {
         Self {
             content: content.into(),
+            key: None,
             on_show: None,
+            on_resize: None,
             on_hide: None,
             anticipate: Pixels::ZERO,
         }
     }
 
     /// Sets the message to be produced when the content pops into view.
-    pub fn on_show(mut self, on_show: Message) -> Self {
-        self.on_show = Some(on_show);
+    ///
+    /// The closure will receive the [`Size`] of the content in that moment.
+    pub fn on_show(mut self, on_show: impl Fn(Size) -> Message + 'a) -> Self {
+        self.on_show = Some(Box::new(on_show));
+        self
+    }
+
+    /// Sets the message to be produced when the content changes [`Size`] once its in view.
+    ///
+    /// The closure will receive the new [`Size`] of the content.
+    pub fn on_resize(
+        mut self,
+        on_resize: impl Fn(Size) -> Message + 'a,
+    ) -> Self {
+        self.on_resize = Some(Box::new(on_resize));
         self
     }
 
     /// Sets the message to be produced when the content pops out of view.
     pub fn on_hide(mut self, on_hide: Message) -> Self {
         self.on_hide = Some(on_hide);
+        self
+    }
+
+    /// Sets the key of the [`Pop`] widget, for continuity.
+    ///
+    /// If the key changes, the [`Pop`] widget will trigger again.
+    pub fn key(mut self, key: impl text::IntoFragment<'a>) -> Self {
+        self.key = Some(key.into_fragment());
         self
     }
 
@@ -62,9 +88,11 @@ where
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 struct State {
     has_popped_in: bool,
+    last_size: Option<Size>,
+    last_key: Option<String>,
 }
 
 impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer>
@@ -92,7 +120,7 @@ where
     fn update(
         &mut self,
         tree: &mut Tree,
-        event: Event,
+        event: &Event,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
         renderer: &Renderer,
@@ -102,8 +130,16 @@ where
     ) {
         if let Event::Window(window::Event::RedrawRequested(_)) = &event {
             let state = tree.state.downcast_mut::<State>();
-            let bounds = layout.bounds();
 
+            if state.has_popped_in
+                && state.last_key.as_deref() != self.key.as_deref()
+            {
+                state.has_popped_in = false;
+                state.last_key =
+                    self.key.as_ref().cloned().map(text::Fragment::into_owned);
+            }
+
+            let bounds = layout.bounds();
             let top_left_distance = viewport.distance(bounds.position());
 
             let bottom_right_distance = viewport
@@ -112,16 +148,27 @@ where
             let distance = top_left_distance.min(bottom_right_distance);
 
             if state.has_popped_in {
-                if let Some(on_hide) = &self.on_hide {
-                    if distance > self.anticipate.0 {
-                        state.has_popped_in = false;
-                        shell.publish(on_hide.clone());
+                if distance <= self.anticipate.0 {
+                    if let Some(on_resize) = &self.on_resize {
+                        let size = bounds.size();
+
+                        if Some(size) != state.last_size {
+                            state.last_size = Some(size);
+                            shell.publish(on_resize(size));
+                        }
                     }
+                } else if let Some(on_hide) = &self.on_hide {
+                    state.has_popped_in = false;
+                    shell.publish(on_hide.clone());
                 }
             } else if let Some(on_show) = &self.on_show {
                 if distance <= self.anticipate.0 {
+                    let size = bounds.size();
+
                     state.has_popped_in = true;
-                    shell.publish(on_show.clone());
+                    state.last_size = Some(size);
+
+                    shell.publish(on_show(size));
                 }
             }
         }

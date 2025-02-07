@@ -17,6 +17,7 @@ pub mod event;
 pub mod font;
 pub mod gradient;
 pub mod image;
+pub mod input_method;
 pub mod keyboard;
 pub mod layout;
 pub mod mouse;
@@ -61,6 +62,7 @@ pub use event::Event;
 pub use font::Font;
 pub use gradient::Gradient;
 pub use image::Image;
+pub use input_method::InputMethod;
 pub use layout::Layout;
 pub use length::Length;
 pub use overlay::Overlay;
@@ -82,3 +84,12 @@ pub use vector::Vector;
 pub use widget::Widget;
 
 pub use smol_str::SmolStr;
+
+/// A function that can _never_ be called.
+///
+/// This is useful to turn generic types into anything
+/// you want by coercing them into a type with no possible
+/// values.
+pub fn never<T>(never: std::convert::Infallible) -> T {
+    match never {}
+}
