@@ -48,7 +48,7 @@ use crate::core::font::{self, Font};
 use crate::core::padding;
 use crate::core::theme;
 use crate::core::{
-    self, color, Color, Element, Length, Padding, Pixels, Theme,
+    self, Color, Element, Length, Padding, Pixels, Theme, color,
 };
 use crate::{column, container, rich_text, row, scrollable, span, text};
 
@@ -142,6 +142,7 @@ impl Content {
                         leftover: String::new(),
                         references: self.state.references.clone(),
                         images: HashSet::new(),
+                        #[cfg(feature = "highlighter")]
                         highlighter: None,
                     };
 
@@ -1098,7 +1099,7 @@ where
 /// Displays a paragraph using the default look.
 pub fn paragraph<'a, Message, Theme, Renderer>(
     settings: Settings,
-    text: &'a Text,
+    text: &Text,
     on_link_click: impl Fn(Url) -> Message + 'a,
 ) -> Element<'a, Message, Theme, Renderer>
 where
@@ -1263,7 +1264,7 @@ where
     fn paragraph(
         &self,
         settings: Settings,
-        text: &'a Text,
+        text: &Text,
     ) -> Element<'a, Message, Theme, Renderer> {
         paragraph(settings, text, Self::on_link_click)
     }

@@ -20,9 +20,9 @@ use crate::futures::futures::{Future, StreamExt};
 use crate::futures::subscription::{self, Subscription};
 use crate::futures::{Executor, Runtime};
 use crate::graphics;
-use crate::graphics::{compositor, Compositor};
-use crate::runtime::user_interface::{self, UserInterface};
+use crate::graphics::{Compositor, compositor};
 use crate::runtime::Debug;
+use crate::runtime::user_interface::{self, UserInterface};
 use crate::runtime::{self, Action, Task};
 use crate::{Clipboard, Error, Proxy, Settings};
 
@@ -363,7 +363,7 @@ where
                                     (
                                         ControlFlow::WaitUntil(current),
                                         ControlFlow::WaitUntil(new),
-                                    ) if new < current => {}
+                                    ) if current < new => {}
                                     (
                                         ControlFlow::WaitUntil(target),
                                         ControlFlow::Wait,
@@ -406,7 +406,9 @@ where
                                         .with_canvas(self.canvas.take())
                                 };
 
-                                log::info!("Window attributes for id `{id:#?}`: {window_attributes:#?}");
+                                log::info!(
+                                    "Window attributes for id `{id:#?}`: {window_attributes:#?}"
+                                );
 
                                 // On macOS, the `position` in `WindowAttributes` represents the "inner"
                                 // position of the window; while on other platforms it's the "outer" position.
@@ -987,6 +989,11 @@ async fn run_instance<P, C>(
                         }
                     }
                     event::Event::AboutToWait => {
+                        if actions > 0 {
+                            proxy.free_slots(actions);
+                            actions = 0;
+                        }
+
                         if events.is_empty()
                             && messages.is_empty()
                             && window_manager.is_idle()
@@ -1103,11 +1110,6 @@ async fn run_instance<P, C>(
                                     &mut window_manager,
                                     cached_interfaces,
                                 ));
-
-                            if actions > 0 {
-                                proxy.free_slots(actions);
-                                actions = 0;
-                            }
                         }
 
                         if let Some(redraw_at) = window_manager.redraw_at() {
